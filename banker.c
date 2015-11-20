@@ -33,10 +33,23 @@ int need[NUM_CUSTOMERS][NUM_RESOURCES];
 
 
 // Define functions declared in banker.h here
-// bool request_res(int n_customer, int request[])
-// {
-//      ...
-// }
+bool request_res(int n_customer, int request[])
+{
+    for(int j = 0; j < NUM_RESOURCES; j++){
+		if(request[j] > need[n_customer][j])
+			return false;
+	}
+	for(int j = 0; j < NUM_RESOURCES; j++){
+		if(request[j] > available[j])
+			return false;
+	}
+	for(int j = 0; j < NUM_RESOURCES; j++){
+		available[j] -= request[j];
+		allocation[n_customer][j] += request[j];
+		need[n_customer][j] -= request[j];
+	}
+	return true;
+}
 
 // Release resources, returns true if successful
 // bool release_res(int n_customer, int release[])

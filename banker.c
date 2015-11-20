@@ -20,8 +20,9 @@
 // Put global environment variables here
 // Available amount of each resource
 int available[NUM_RESOURCES];
-
+// max amount of each resource, used to calculate random values
 int max[NUM_RESOURCES];
+pthread_mutex_t lock;
 
 // Maximum demand of each customer
 int maximum[NUM_CUSTOMERS][NUM_RESOURCES];
@@ -38,10 +39,8 @@ void* requestReleaseRepeat (void* arg) {
     for (int i = 0; i < 3; i++) {
         int randAmount[NUM_RESOURCES];
 
-        for (int i = 0; i < NUM_RESOURCES; i++) {
+        for (int i = 0; i < NUM_RESOURCES; i++)
             randAmount[i] = rand() % max[i];
-            printf("%d\n", randAmount[i]);
-        }
 
         //requestRes(customerNumber, randAmount);
         //releaseRes(customerNumber, randAmount);
@@ -73,6 +72,7 @@ int main(int argc, char *argv[]) {
         max[i] = atoi(argv[i+1]);
     }
 
+    pthread_mutex_init(&lock, NULL);
     pthread_create(&customerZero, 0, requestReleaseRepeat, (void*) 0);
     pthread_create(&customerOne, 0, requestReleaseRepeat, (void*) 1);
     pthread_create(&customerTwo, 0, requestReleaseRepeat, (void*) 2);
@@ -98,6 +98,7 @@ int main(int argc, char *argv[]) {
     pthread_join(customerTwo, NULL);
     pthread_join(customerThree, NULL);
     pthread_join(customerFour, NULL);
+    pthread_mutex_destroy(&lock);
 
     return EXIT_SUCCESS;
 }

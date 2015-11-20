@@ -48,11 +48,26 @@ void* requestReleaseRepeat (void* arg) {
     return NULL;
 }
 
-bool requestRes (int customerNumber, int amount[]) {
-    return false;
+// Define functions declared in banker.h here
+bool request_res(int n_customer, int request[])
+{
+    for(int j = 0; j < NUM_RESOURCES; j++){
+		if(request[j] > need[n_customer][j])
+			return false;
+	}
+	for(int j = 0; j < NUM_RESOURCES; j++){
+		if(request[j] > available[j])
+			return false;
+	}
+	for(int j = 0; j < NUM_RESOURCES; j++){
+		available[j] -= request[j];
+		allocation[n_customer][j] += request[j];
+		need[n_customer][j] -= request[j];
+	}
+	return true;
 }
 
-bool releaseRes (int customerNumber, int amount[]) {
+bool release_res (int n_customer, int amount[]) {
     return false;
 }
 

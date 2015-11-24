@@ -71,10 +71,10 @@ void* requestReleaseRepeat (void* arg) {
 
         pthread_mutex_lock(&lock);
         printf("Freeing: ");
-        for (int i = 0; i < NUM_RESOURCES; i++) {
+        /*for (int i = 0; i < NUM_RESOURCES; i++) {
             randAmount[i] = rand() % allocation[customerNumber][i]; // generate random amount of resources to release
             printf("%d ", randAmount[i]);
-        }
+        }*/
         printf("\n");
         pthread_mutex_unlock(&lock);
 

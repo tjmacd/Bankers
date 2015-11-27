@@ -38,68 +38,73 @@ int work[NUM_RESOURCES];
 int finish[NUM_CUSTOMERS];
 
 void* requestReleaseRepeat (void* arg) {
+    // local variables
     int customerNumber = (int) arg;
+    bool resourcesAllocated = false;
+    srand((unsigned)time(NULL));
 
-    for (int run = 0; run < 3; run++) {
-        int randAmount[NUM_RESOURCES];
+    // generate the max amount of resources this thread requires in order to run
+    for (int i = 0; i < NUM_RESOURCES; i++) {
+        maximum[customerNumber][i] = rand() % (max[i] + 1);
+        need[customerNumber][i] = maximum[customerNumber][i];
+    }
 
-        pthread_mutex_lock(&lock);
-        //printf("\nCustomer: %d\nNeed: ", customerNumber);
-        
+    // continuously loop until the thread has allocated all the resources it needs
+    while (!resourcesAllocated) {
+        int request[NUM_RESOURCES]; // hold random amount of resources to allocate
+
+        // generate a random amount of resources(bounded by need) to allocate to the thread   
         for (int i = 0; i < NUM_RESOURCES; i++) {
-            randAmount[i] = rand() % max[i]; // generate random amount of resources to allocate
-            if (need[customerNumber][i]+randAmount[i] > max[i]) {
-                randAmount[i] = max[i] - need[customerNumber][i];
-                need[customerNumber][i] = max[i];
+            if (need[customerNumber][i] == 0)
+                request[i] = 0;
+            else {
+                request[i] = rand() % (need[customerNumber][i] + 1);
+            }
+        }
+
+        while (true) {
+            pthread_mutex_lock(&lock);
+            if (request_Res(customerNumber, request)) {
+                pthread_mutex_unlock(&lock);
+                resourcesAllocated = true;
+                // check if all resources have been allocated
+                for (int i = 0; i < NUM_RESOURCES; i++) {
+                    if (need[customerNumber][i] != 0)
+                        resourcesAllocated = false;
+                }
+                break;
             } else {
-                need[customerNumber][i] += randAmount[i]; // add to need array
-            }
-
-            //printf("%d ", need[customerNumber][i]);
-        }
-        //printf("\n");
-        pthread_mutex_unlock(&lock);
-
-        while (true) {
-            pthread_mutex_lock(&lock);
-            if (request_Res(customerNumber, randAmount)) {
+                printf("Unsafe\n");
                 pthread_mutex_unlock(&lock);
-                break;
             }
-            pthread_mutex_unlock(&lock);
-        }
-
-        pthread_mutex_lock(&lock);
-        printf("Freeing: ");
-        /*for (int i = 0; i < NUM_RESOURCES; i++) {
-            randAmount[i] = rand() % allocation[customerNumber][i]; // generate random amount of resources to release
-            printf("%d ", randAmount[i]);
-        }*/
-        printf("\n");
-        pthread_mutex_unlock(&lock);
-
-        while (true) {
-            pthread_mutex_lock(&lock);
-            if (release_Res(customerNumber, randAmount)) {
-                pthread_mutex_unlock(&lock);
-                break;
-            }
-            pthread_mutex_unlock(&lock);
         }
     }
-    return NULL;
+    // free all resources since the thread has allocated all it needs
+    pthread_mutex_lock(&lock);
+    release_Res(customerNumber, maximum[customerNumber]);
+    pthread_mutex_unlock(&lock);
+
+    return NULL; // exit thread
 }
 
 // Define functions declared in banker.h here
-bool request_Res(int nCustomer, int request[]) {
+bool request_Res(int nCustomer, int request[NUM_RESOURCES]) {
     // check if there are enough resources to even allocate
     for(int j = 0; j < NUM_RESOURCES; j++) {
 		if(request[j] > need[nCustomer][j]) {
-            printf("Exceeded need customer %d\n", nCustomer);
+            printf("Customer: %d exceeded need\n", nCustomer);
+            for (int i = 0; i < NUM_RESOURCES; i++) {
+                printf("%d ", request[i]);
+            }
+            printf("\n");
+            for (int i = 0; i < NUM_RESOURCES; i++) {
+                printf("%d ", need[nCustomer][i]);
+            }
+            printf("\n");
 			return false;
         }
         if(request[j] > available[j]) {
-            printf("Exceeded available customer %d\nAvailable: ", nCustomer);
+            printf("Customer: %d exceeded available\nAvailable: ", nCustomer);
             for (int i = 0; i < NUM_RESOURCES; i++)
                 printf("%d ", available[i]);
             printf("\n");
@@ -129,7 +134,8 @@ bool request_Res(int nCustomer, int request[]) {
 	for(int j = 0; j < NUM_RESOURCES; j++) {
 		available[j] -= request[j];
 		allocation[nCustomer][j] += request[j];
-		need[nCustomer][j] -= request[j];
+		//need[nCustomer][j] -= request[j];
+        need[nCustomer][j] = maximum[nCustomer][j] - allocation[nCustomer][j];
 	}
 
     if (isSafe()) {
@@ -137,20 +143,17 @@ bool request_Res(int nCustomer, int request[]) {
     }
     else {
         // resulting state unsafe, revert changes
-        for (int j = 0; j < NUM_RESOURCES; j++) {
-            available[j] += request[j];
-            allocation[nCustomer][j] -= request[j];
-            need[nCustomer][j] += request[j];
-        }
+        release_Res(nCustomer, request);
         return false;
     }
 }
 
 bool release_Res (int nCustomer, int amount[]) {
     for (int j = 0; j < NUM_RESOURCES; j++) {
-            available[j] += amount[j];
-            allocation[nCustomer][j] -= amount[j];
-            need[nCustomer][j] += amount[j];
+        available[j] += amount[j];
+        allocation[nCustomer][j] -= amount[j];
+        //need[nCustomer][j] += amount[j];
+        need[nCustomer][j] = maximum[nCustomer][j] - allocation[nCustomer][j];
     }
     return true;
 }
@@ -220,30 +223,16 @@ int main(int argc, char *argv[]) {
     // create customer threadss and run them
     pthread_mutex_init(&lock, NULL);
     pthread_create(&customerZero, 0, requestReleaseRepeat, (void*) 0);
-    //pthread_create(&customerOne, 0, requestReleaseRepeat, (void*) 1);
+    pthread_create(&customerOne, 0, requestReleaseRepeat, (void*) 1);
     //pthread_create(&customerTwo, 0, requestReleaseRepeat, (void*) 2);
     //pthread_create(&customerThree, 0, requestReleaseRepeat, (void*) 3);
     //pthread_create(&customerFour, 0, requestReleaseRepeat, (void*) 4);
 
-    // ==================== YOUR CODE HERE ==================== //
-
-    // Initialize the pthreads, locks, mutexes, etc.
-
-    // Run the threads and continually loop
-
-    // The threads will request and then release random numbers of resources
-
-    // If your program hangs you may have a deadlock, otherwise you *may* have
-    // implemented the banker's algorithm correctly
-    
-    // If you are having issues try and limit the number of threads (NUM_CUSTOMERS)
-    // to just 2 and focus on getting the multithreading working for just two threads
-
     pthread_join(customerZero, NULL);
-   // pthread_join(customerOne, NULL);
- /* pthread_join(customerTwo, NULL);
-    pthread_join(customerThree, NULL);
-    pthread_join(customerFour, NULL);*/
+    pthread_join(customerOne, NULL);
+    //pthread_join(customerTwo, NULL);
+    //pthread_join(customerThree, NULL);
+    //pthread_join(customerFour, NULL);
     pthread_mutex_destroy(&lock);
 
     return EXIT_SUCCESS;

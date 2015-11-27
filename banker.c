@@ -23,6 +23,7 @@ int available[NUM_RESOURCES];
 // max amount of each resource, used to calculate random values
 int max[NUM_RESOURCES];
 pthread_mutex_t lock;
+pthread_mutex_t console;
 
 // Maximum demand of each customer
 int maximum[NUM_CUSTOMERS][NUM_RESOURCES];
@@ -36,6 +37,52 @@ int need[NUM_CUSTOMERS][NUM_RESOURCES];
 // banker's algorithm variables
 int work[NUM_RESOURCES];
 int finish[NUM_CUSTOMERS];
+
+void print_resources () {
+    pthread_mutex_lock(&console);
+    printf("Available: ");
+
+    for (int i = 0; i < NUM_RESOURCES; i++)
+        printf("%d ", available[i]);
+
+    printf("\n");
+    pthread_mutex_unlock(&console);
+}
+
+void print_need (int customerNumber) {
+    pthread_mutex_lock(&console);
+    printf("Need for %d: ", customerNumber);
+
+    for (int i = 0; i < NUM_RESOURCES; i++)
+        printf("%d ", need[customerNumber][i]);
+
+    printf("\n");
+    pthread_mutex_unlock(&console);
+}
+
+void print_allocation (int customerNumber, int request[], bool isSafe) {
+    pthread_mutex_lock(&console);
+    printf("Customer %d requesting to allocate: ", customerNumber);
+    for (int i = 0; i < NUM_RESOURCES; i++)
+        printf("%d ", request[i]);
+    if (!isSafe)
+        printf("\nState unsafe: Request denied\n");
+    else
+        printf("\nState safe: Request granted\n");
+
+    printf("\n");
+    pthread_mutex_unlock(&console);
+}
+
+void print_deallocation (int customerNumber, int amount[]) {
+    pthread_mutex_lock(&console);
+    printf("Customer %d de-allocating: ", customerNumber);
+    for (int i = 0; i < NUM_RESOURCES; i++)
+        printf("%d ", amount[i]);
+
+    printf("\n\n");
+    pthread_mutex_unlock(&console);
+}
 
 void* requestReleaseRepeat (void* arg) {
     // local variables
@@ -74,7 +121,6 @@ void* requestReleaseRepeat (void* arg) {
                 }
                 break;
             } else {
-                printf("Unsafe\n");
                 pthread_mutex_unlock(&lock);
             }
         }
@@ -88,61 +134,26 @@ void* requestReleaseRepeat (void* arg) {
 }
 
 // Define functions declared in banker.h here
-bool request_Res(int nCustomer, int request[NUM_RESOURCES]) {
+bool request_Res (int nCustomer, int request[NUM_RESOURCES]) {
     // check if there are enough resources to even allocate
-    for(int j = 0; j < NUM_RESOURCES; j++) {
-		if(request[j] > need[nCustomer][j]) {
-            printf("Customer: %d exceeded need\n", nCustomer);
-            for (int i = 0; i < NUM_RESOURCES; i++) {
-                printf("%d ", request[i]);
-            }
-            printf("\n");
-            for (int i = 0; i < NUM_RESOURCES; i++) {
-                printf("%d ", need[nCustomer][i]);
-            }
-            printf("\n");
+    for (int j = 0; j < NUM_RESOURCES; j++) {
+		if(request[j] > need[nCustomer][j] || request[j] > available[j])
 			return false;
-        }
-        if(request[j] > available[j]) {
-            printf("Customer: %d exceeded available\nAvailable: ", nCustomer);
-            for (int i = 0; i < NUM_RESOURCES; i++)
-                printf("%d ", available[i]);
-            printf("\n");
-            printf("Requested: ");
-            for (int i = 0; i < NUM_RESOURCES; i++)
-                printf("%d ", request[i]);
-            printf("\n");
-            return false;
-        }
 	}
 
-    printf("\nAvailable: ");
-    for(int j = 0; j < NUM_RESOURCES; j++)
-        printf("%d ", available[j]);
-    printf("\nRequested: ");
-    for (int i = 0; i < NUM_RESOURCES; i++)
-        printf("%d ", request[i]);
-    printf("\nAllocation[%d]: ", nCustomer);
-    for(int j = 0; j < NUM_RESOURCES; j++)
-        printf("%d ", allocation[nCustomer][j]);
-    printf("\nneed[%d]:", nCustomer);
-    for(int j = 0; j < NUM_RESOURCES; j++)
-        printf("%d ", need[nCustomer][j]);
-    printf("\n");
-
     // make change to resources to check if the resulting state will be safe
-	for(int j = 0; j < NUM_RESOURCES; j++) {
+	for (int j = 0; j < NUM_RESOURCES; j++) {
 		available[j] -= request[j];
 		allocation[nCustomer][j] += request[j];
-		//need[nCustomer][j] -= request[j];
         need[nCustomer][j] = maximum[nCustomer][j] - allocation[nCustomer][j];
 	}
 
-    if (isSafe()) {
+    if (is_safe()) {
+        print_allocation(nCustomer, request, true);
         return true;
     }
-    else {
-        // resulting state unsafe, revert changes
+    else { // resulting state unsafe, revert changes
+        print_allocation(nCustomer, request, false);
         release_Res(nCustomer, request);
         return false;
     }
@@ -152,55 +163,60 @@ bool release_Res (int nCustomer, int amount[]) {
     for (int j = 0; j < NUM_RESOURCES; j++) {
         available[j] += amount[j];
         allocation[nCustomer][j] -= amount[j];
-        //need[nCustomer][j] += amount[j];
         need[nCustomer][j] = maximum[nCustomer][j] - allocation[nCustomer][j];
+    }
+    print_deallocation(nCustomer, amount);
+    return true;
+}
+
+bool lessthan_equalto (int array1[], int array2[], int length) {
+    for (int i = 0; i < length; i++) {
+        if (array1[i] > array2[i])
+            return false;
     }
     return true;
 }
 
-bool isSafe () {
-    bool violation = false;
+// Check if state is safe
+bool is_safe () {
+    // local variables
+    int work[NUM_RESOURCES];
+    bool finish[NUM_CUSTOMERS] = {false};
+    bool found;
 
     // Step 1:
-    // initialise work array
     for (int i = 0; i < NUM_RESOURCES; i++)
         work[i] = available[i];
-    // initialise finish array
-    for (int i = 0; i < NUM_CUSTOMERS; i++)
-        finish[i] = false;
 
     // Step 2:
-    for (int i = 0; i < NUM_CUSTOMERS; i++) {
-        if (finish[i] == false) {
-            for (int j = 0; j < NUM_RESOURCES; j++) {
-                if (need[i][j] > work[i]) {
-                    // violation, i is not the value we are looking for
-                    violation = true;
-                    break;
+    do {
+        found = false;
+        for (int i = 0; i < NUM_CUSTOMERS; i++) {
+            if (finish[i] == false) {
+                if (lessthan_equalto(need[i], work, NUM_RESOURCES)) {
+                    found = true;
+                    // Step 3:
+                    for (int j = 0; j < NUM_RESOURCES; j++)
+                        work[j] += allocation[i][j];
+
+                    finish[i] = true;
                 }
             }
-            if (!violation) {
-                // Step 3:
-                for (int j = 0; j < NUM_RESOURCES; j++)
-                    work[j] = work[j] + allocation[i][j];
-                finish[i] = true;
-                i = 0;
-            }
-            continue;
         }
-    }
+    } while(found);
+
     // Step 4:
     for (int i = 0; i < NUM_CUSTOMERS; i++) {
-        if (!finish[i])
+        if (finish[i] == false)
             return false;
     }
     return true;
 }
 
 
-int main(int argc, char *argv[]) {
+int main (int argc, char *argv[]) {
     // define local variables
-    pthread_t customerZero, customerOne, customerTwo, customerThree, customerFour;
+    pthread_t customer[NUM_CUSTOMERS];
 
     if (argc != NUM_RESOURCES+1) {
         printf("Error: Incorrect amount of arguments supplied. Requires: %d Received: %d\n", NUM_RESOURCES, argc-1);
@@ -220,20 +236,21 @@ int main(int argc, char *argv[]) {
             need[i][j] = 0;
         }
     }
-    // create customer threadss and run them
+    // initialise the mutex locks
     pthread_mutex_init(&lock, NULL);
-    pthread_create(&customerZero, 0, requestReleaseRepeat, (void*) 0);
-    pthread_create(&customerOne, 0, requestReleaseRepeat, (void*) 1);
-    //pthread_create(&customerTwo, 0, requestReleaseRepeat, (void*) 2);
-    //pthread_create(&customerThree, 0, requestReleaseRepeat, (void*) 3);
-    //pthread_create(&customerFour, 0, requestReleaseRepeat, (void*) 4);
+    pthread_mutex_init(&console, NULL);
+    
+    // create customer threads and run them
+    for (int i = 0; i < NUM_CUSTOMERS; i++)
+        pthread_create(&customer[i], 0, requestReleaseRepeat, (void*) i);
 
-    pthread_join(customerZero, NULL);
-    pthread_join(customerOne, NULL);
-    //pthread_join(customerTwo, NULL);
-    //pthread_join(customerThree, NULL);
-    //pthread_join(customerFour, NULL);
+    // join the customer threads
+    for (int i = 0; i < NUM_CUSTOMERS; i++)
+        pthread_join(customer[i], NULL);
+
+    // destroy the mutex locks
     pthread_mutex_destroy(&lock);
+    pthread_mutex_destroy(&console);
 
     return EXIT_SUCCESS;
 }

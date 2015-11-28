@@ -1,7 +1,7 @@
 /*
  * Banker's Algorithm for SOFE 3950U / CSCI 3020U: Operating Systems
  *
- * Copyright (C) 2015, Muhammad Adham, Timothy MacDougall, Devin Westbye
+ * Copyright (C) 2015, Muhammad Ahmad, Timothy MacDougall, Devin Westbye
  * All rights reserved.
  * 
  */
@@ -33,10 +33,6 @@ int allocation[NUM_CUSTOMERS][NUM_RESOURCES];
 
 // Remaining need of each customer
 int need[NUM_CUSTOMERS][NUM_RESOURCES];
-
-// banker's algorithm variables
-int work[NUM_RESOURCES];
-int finish[NUM_CUSTOMERS];
 
 void print_resources () {
     pthread_mutex_lock(&console);
